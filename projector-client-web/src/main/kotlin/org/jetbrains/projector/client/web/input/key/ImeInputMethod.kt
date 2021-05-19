@@ -24,6 +24,7 @@
 package org.jetbrains.projector.client.web.input.key
 
 import kotlinx.browser.document
+import kotlinx.coroutines.*
 import org.jetbrains.projector.client.common.misc.TimeStamp
 import org.jetbrains.projector.common.misc.isUpperCase
 import org.jetbrains.projector.common.protocol.toServer.ClientEvent
@@ -67,12 +68,50 @@ class ImeInputMethod(
       clientEventConsumer(message)
     }
 
-    var composing = false
+    val pendingKeyDowns = mutableListOf<Deferred<() -> Unit>>()
+
+    var keyDownsFlusher: Job? = null
+
+    fun flushKeyDowns() {
+      keyDownsFlusher?.cancel()
+      keyDownsFlusher = null
+      pendingKeyDowns.forEach { GlobalScope.launch { it.await().invoke() } }
+      pendingKeyDowns.clear()
+    }
+
+    // On macOS, before composition start we have a keydown event which seems to be indistinguishable
+    // from a simple keydown event. Therefore, we need to check that after this event there are no
+    // composition events for some amount of time and send this event only if we are sure.
+    // If there is composition, we drop this event.
+    val MAX_DELAY_FROM_DOWN_TO_COMPOSITION_MS = 200L
+
+    fun fireKeyEvent(type: ClientKeyEvent.KeyEventType) = lambda@{ event: KeyboardEvent ->
+      if (event.key == "Process" || event.isComposing) {
+        return@lambda
+      }
+
+      flushKeyDowns()
+      if (type == DOWN) {
+        pendingKeyDowns.add(clientEventConsumer.prepareKeyEventFiringAsync(type, event, openingTimeStamp))
+        keyDownsFlusher = GlobalScope.launch {
+          delay(MAX_DELAY_FROM_DOWN_TO_COMPOSITION_MS)
+          flushKeyDowns()
+        }
+      }
+      else {
+        GlobalScope.launch {
+          clientEventConsumer
+            .prepareKeyEventFiringAsync(type, event, openingTimeStamp)
+            .await()
+            .invoke()
+        }
+      }
+    }
 
     addEventListener(
       "compositionstart",
       {
-        composing = true
+        pendingKeyDowns.clear()
       }
     )
 
@@ -82,7 +121,6 @@ class ImeInputMethod(
         require(event is CompositionEvent)
 
         clearInputField()
-        composing = false
 
         event.data.forEach { char ->
           fireKeyPress(char)
@@ -90,11 +128,12 @@ class ImeInputMethod(
       }
     )
 
-    onkeydown = fireKeyEvent(clientEventConsumer, openingTimeStamp, DOWN)
-    onkeyup = fireKeyEvent(clientEventConsumer, openingTimeStamp, UP)
+    onkeydown = fireKeyEvent(DOWN)
+    onkeyup = fireKeyEvent(UP)
 
     oninput = {
-      if (!composing) {
+      if (!it.isComposing) {
+        flushKeyDowns()
         clearInputField()
       }
     }
@@ -117,20 +156,5 @@ class ImeInputMethod(
 
   override fun dispose() {
     inputField.remove()
-  }
-
-  private companion object {
-
-    private fun fireKeyEvent(
-      clientEventConsumer: (ClientEvent) -> Unit,
-      openingTimeStamp: Int,
-      type: ClientKeyEvent.KeyEventType,
-    ) = lambda@{ event: KeyboardEvent ->
-      if (event.key == "Process") {
-        return@lambda
-      }
-
-      clientEventConsumer.fireKeyEvent(type, event, openingTimeStamp)
-    }
   }
 }
