@@ -28,7 +28,7 @@ script:
 branches:
   only:
     - master
-    - /launcher-\d+\.\d+(\.\d+)?(\-.+)?/
+    - /launcher-v.+/
 
 before_deploy:
   - git config --local user.name "wdslb"
