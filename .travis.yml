@@ -43,5 +43,5 @@ deploy:
   file: projector-launcher/build/electronOut/*.zip
   on:
     repo: wdslb/projector-client
-    tags: true
+    # tags: true
     all_branches: true
