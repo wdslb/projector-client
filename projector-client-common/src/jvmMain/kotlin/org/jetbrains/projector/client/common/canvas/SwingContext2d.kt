@@ -156,7 +156,7 @@ class SwingContext2d(graphics: Graphics2D) : Context2d {
 
   override fun setFillStyle(color: PaintColor?) {
     Do exhaustive when(color) {
-      is PaintColor.SolidColor -> graphics.color = Color(color.argb)
+      is PaintColor.SolidColor -> graphics.color = Color(color.argb, true)
       is PaintColor.Gradient -> graphics.paint = (color as GradientImpl).getPaint()
       null -> {}
     }
@@ -164,14 +164,14 @@ class SwingContext2d(graphics: Graphics2D) : Context2d {
 
   override fun setStrokeStyle(color: PaintColor?) {
     Do exhaustive when(color) {
-      is PaintColor.SolidColor -> graphics.color = Color(color.argb)
+      is PaintColor.SolidColor -> graphics.color = Color(color.argb, true)
       is PaintColor.Gradient -> graphics.paint = (color as GradientImpl).getPaint()
       null -> {}
     }
   }
 
   override fun setGlobalAlpha(alpha: Double) {
-    graphics.composite = AlphaComposite.getInstance((graphics.composite as AlphaComposite).rule, alpha.toFloat())
+    graphics.composite = (graphics.composite as AlphaComposite).derive(alpha.toFloat())
   }
 
   override fun setGlobalCompositeOperation(type: Context2d.CompositeOperationType) {

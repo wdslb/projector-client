@@ -34,14 +34,28 @@ import org.jetbrains.projector.util.logging.Logger
 abstract class AbstractWindowManager<FrameType> {
   private val logger = Logger<AbstractWindowManager<FrameType>>()
   private val currentWindows = HashMap<Int, FrameData>()
+  private var lastLoggedWindowCount = 0
 
-  abstract fun newFrame(windowId: Int, canvas: SwingCanvas): FrameType
-  abstract fun updateFrameProperties(frameData: FrameData)
+  abstract fun newFrame(windowId: Int, canvas: SwingCanvas, windowData: WindowData): FrameType
   abstract fun deleteFrame(frame: FrameType)
-  abstract fun updateWindow(frame: FrameData)
+  abstract fun redrawWindow(frame: FrameData)
+
+  open fun getScalingForWindow(frame: FrameData): Double = 1.0
+  open fun updateFrameProperties(frameData: FrameData) {
+    val it = frameData.windowData
+
+    frameData.surfaceSizeScale = getScalingForWindow(frameData)
+    frameData.surface.setBounds((it.bounds.width * frameData.surfaceSizeScale).toInt(), (it.bounds.height * frameData.surfaceSizeScale).toInt())
+    frameData.surface.scalingRatio = frameData.surfaceSizeScale
+  }
+
+  fun getFrameData(windowId: Int) = currentWindows[windowId]
 
   fun windowSetUpdated(event: ServerWindowSetChangedEvent) {
-    logger.info { "Updating window set with ${event.windowDataList.size} windows" }
+    if (lastLoggedWindowCount != event.windowDataList.size) {
+      lastLoggedWindowCount = event.windowDataList.size
+      logger.debug { "Updating window set with $lastLoggedWindowCount windows" }
+    }
     val windowsToDelete = currentWindows.keys.toHashSet()
     event.windowDataList.forEach {
       windowsToDelete.remove(it.id)
@@ -49,16 +63,21 @@ abstract class AbstractWindowManager<FrameType> {
       val existing = currentWindows.getOrPut(it.id) {
         val canvas = SwingCanvas()
         val surface = DoubleBufferedRenderingSurface(canvas)
-        FrameData(newFrame(it.id, canvas), it, ArrayDeque(), surface, SingleRenderingSurfaceProcessor(surface))
+        FrameData(newFrame(it.id, canvas, it), it, ArrayDeque(), surface, SingleRenderingSurfaceProcessor(surface), 1.0)
       }
       existing.windowData = it
-      existing.surface.setBounds(it.bounds.width.toInt(), it.bounds.height.toInt())
       updateFrameProperties(existing)
     }
 
     windowsToDelete.forEach {
       val oldFrame = currentWindows.remove(it) ?: return@forEach
       deleteFrame(oldFrame.frame)
+    }
+  }
+
+  fun reapplyWindowProperties() {
+    for (it in currentWindows) {
+      updateFrameProperties(it.value)
     }
   }
 
@@ -69,13 +88,13 @@ abstract class AbstractWindowManager<FrameType> {
       return
     }
 
-    window.drawEvents.addAll(drawEvents.shrinkByPaintEvents())
-
-    window.processor.process(window.drawEvents)
-
-    window.surface.flush()
-
-    updateWindow(window)
+    val newDrawEvents = drawEvents.shrinkByPaintEvents()
+    if (newDrawEvents.isNotEmpty()) {
+      window.drawEvents.addAll(newDrawEvents)
+      window.processor.process(window.drawEvents)
+      window.surface.flush()
+      redrawWindow(window)
+    }
   }
 
   inner class FrameData(
@@ -84,5 +103,6 @@ abstract class AbstractWindowManager<FrameType> {
     val drawEvents: ArrayDeque<DrawEvent>,
     val surface: DoubleBufferedRenderingSurface,
     val processor: SingleRenderingSurfaceProcessor,
+    var surfaceSizeScale: Double
   )
 }
