@@ -40,23 +40,34 @@ class SingleRenderingSurfaceProcessor(renderingSurface: RenderingSurface) {
 
   private val stateSaver = StateSaver(renderer, renderingSurface)
 
-  @OptIn(ExperimentalStdlibApi::class)
-  fun process(drawEvents: ArrayDeque<DrawEvent>) {
+  fun processPending(drawEvents: ArrayDeque<DrawEvent>) {
     stateSaver.restoreIfNeeded()
 
-    var removing = true
+    val firstUnsuccessful = processNew(drawEvents)
 
-    drawEvents.removeAll { drawEvent ->
+    if (firstUnsuccessful == null) {
+      drawEvents.clear()
+    }
+    else {
+      repeat(firstUnsuccessful) {
+        drawEvents.removeFirst()
+      }
+    }
+  }
+
+  fun processNew(drawEvents: Iterable<DrawEvent>): Int? {
+    var firstUnsuccessful: Int? = null
+
+    drawEvents.forEachIndexed { index, drawEvent ->
       val drawIsSuccessful = handleDrawEvent(drawEvent)
 
-      if (!drawIsSuccessful && removing) {
-        stateSaver.save()
-
-        removing = false
+      if (!drawIsSuccessful && firstUnsuccessful == null) {
+        stateSaver.saveIfNeeded()
+        firstUnsuccessful = index
       }
-
-      removing
     }
+
+    return firstUnsuccessful
   }
 
   private fun handleDrawEvent(command: DrawEvent): Boolean {
@@ -212,7 +223,11 @@ class SingleRenderingSurfaceProcessor(renderingSurface: RenderingSurface) {
 
     private var lastSuccessfulState: LastSuccessfulState? = null
 
-    fun save() {
+    fun saveIfNeeded() {
+      if (lastSuccessfulState != null) {
+        return
+      }
+
       lastSuccessfulState = LastSuccessfulState(
         renderingState = renderer.requestedState.copy(),
         image = renderingSurface.canvas.takeSnapshot()
@@ -222,16 +237,7 @@ class SingleRenderingSurfaceProcessor(renderingSurface: RenderingSurface) {
     fun restoreIfNeeded() {
       lastSuccessfulState?.let {
         renderer.drawImageRaw(it.image)
-
-        it.renderingState.let {
-          renderer.requestedState.apply {
-            identitySpaceClip = it.identitySpaceClip
-            transform = it.transform
-            strokeData = it.strokeData
-            font = it.font
-            paint = it.paint
-          }
-        }
+        renderer.requestedState.setTo(it.renderingState)
 
         lastSuccessfulState = null
       }

@@ -24,7 +24,6 @@
 package org.jetbrains.projector.client.web
 
 import kotlinx.browser.window
-import org.jetbrains.projector.client.common.DrawEvent
 import org.jetbrains.projector.client.common.SingleRenderingSurfaceProcessor.Companion.shrinkByPaintEvents
 import org.jetbrains.projector.client.common.misc.ImageCacher
 import org.jetbrains.projector.client.web.component.MarkdownPanelManager
@@ -36,6 +35,7 @@ import org.jetbrains.projector.client.web.window.WindowDataEventsProcessor
 import org.jetbrains.projector.common.misc.Do
 import org.jetbrains.projector.common.protocol.toClient.*
 import org.jetbrains.projector.util.logging.Logger
+import org.w3c.dom.url.URL
 
 class ServerEventsProcessor(private val windowDataEventsProcessor: WindowDataEventsProcessor) {
 
@@ -97,12 +97,15 @@ class ServerEventsProcessor(private val windowDataEventsProcessor: WindowDataEve
         is ServerDrawCommandsEvent.Target.Offscreen -> {
           val offscreenProcessor = ImageCacher.getOffscreenProcessor(target)
 
-          // todo: don't create this deque every time
-          val drawEvents = ArrayDeque<DrawEvent>().apply { addAll(event.drawEvents.shrinkByPaintEvents()) }
+          val drawEvents = event.drawEvents.shrinkByPaintEvents()
 
-          offscreenProcessor.process(drawEvents)
+          val firstUnsuccessful = offscreenProcessor.processNew(drawEvents)
+          if (firstUnsuccessful != null) {
+            // todo: remember unsuccessful events and redraw pending ones as for windows
+            logger.error { "Encountered unsuccessful drawing for an offscreen surface ${target.pVolatileImageId}, skipping" }
+          }
 
-          windowDataEventsProcessor.redrawWindows()
+          windowDataEventsProcessor.drawPendingEvents()
         }
       }
     }
@@ -117,8 +120,16 @@ class ServerEventsProcessor(private val windowDataEventsProcessor: WindowDataEve
       .catch { logger.error { "Error writing clipboard: $it" } }
   }
 
+
   private fun browseUri(link: String) {
-    val popUpWindow = window.open(link, "_blank")
+    val url = URL(link)
+
+    if(url.hostname == "localhost" || url.hostname == "127.0.0.1" || url.host == "::1") {
+      url.hostname = window.location.hostname
+      url.protocol = window.location.protocol
+    }
+
+    val popUpWindow = window.open(url.href, "_blank")
 
     if (popUpWindow != null) {
       popUpWindow.focus()  // browser has allowed it to be opened

@@ -1,4 +1,4 @@
-Current [JetBrains IDEs](https://www.jetbrains.com/products/#type=ide) use Swing to draw GUI. The same is true for other IntelliJ-based apps like [Android Studio](https://developer.android.com/studio/). Therefore, Projector that is a technology for rendering Swing GUI over the network is a good way to run and access these apps remotely. It should be compatible with all existing JetBrains IDEs. This section of documentation describes how Projector is adapted to IntelliJ-based apps.
+Current [JetBrains IDEs](https://www.jetbrains.com/products/#type=ide) use Swing to draw GUI. The same is true for other IntelliJ-based apps like [Android Studio](https://developer.android.com/studio/). Therefore, Projector that is a technology for rendering Swing GUI over the network is a good way to run and access these apps remotely. It should be compatible with all existing JetBrains IDEs (but we have a special file with a list of IDEs that we've tested with Projector [here](https://github.com/JetBrains/projector-installer/blob/master/projector_installer/compatible_ide.json)). This section of documentation describes how Projector is adapted to IntelliJ-based apps.
 
 *[GUI]: Graphical User Interface
 
@@ -71,13 +71,14 @@ On the other hand, X11, VNC, and RDP are well-known solutions, and system admini
 
 Also, we have a [special documentation page](../about/comparison.md) where we list advantages of Projector.
 
-## Is it Open Source?
+## Is it open-source?
 
-Now, everything is an Open Source or Free Software:
+Now, everything is free and open-source software:
 
-*   Dockerfiles (Apache License 2.0): <https://github.com/JetBrains/projector-docker>.
-*   Server (GNU GPL v2.0): <https://github.com/JetBrains/projector-server>.
-*   Client (MIT License): <https://github.com/JetBrains/projector-client>.
+* Dockerfiles (Apache License 2.0): <https://github.com/JetBrains/projector-docker>.
+* Installer (Apache License 2.0): <https://github.com/JetBrains/projector-installer>.
+* Server (GNU GPL v2.0 + Classpath Exception): <https://github.com/JetBrains/projector-server>.
+* Client (MIT License): <https://github.com/JetBrains/projector-client>.
 
 ## Known problems
 

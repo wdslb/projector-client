@@ -21,19 +21,40 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.jetbrains.projector.common.protocol.toServer
+package org.jetbrains.projector.intTest.keyboard
 
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
+import com.codeborne.selenide.Selenide.element
+import org.openqa.selenium.Keys
 
-object KotlinxJsonClientEventSerializer {
+fun activateMobileKeyboard() {
+  element("#toggleInput").click()
+}
 
-  private val json = Json {}
+fun inputWithMobileButtons(vararg keysToSend: CharSequence, ctrl: Boolean, shift: Boolean, f: Keys?, esc: Boolean) {
+  if (ctrl) {
+    element("#toggleCtrl").click()
+  }
+  if (shift) {
+    element("#toggleShift").click()
+  }
 
-  private val serializer = ListSerializer(ClientEvent.serializer())
+  if (keysToSend.isNotEmpty()) {
+    element("body").sendKeys(*keysToSend)
+  }
 
-  fun serializeList(msg: List<ClientEvent>): String = json.encodeToString(serializer, msg)
-  fun deserializeList(data: String): List<ClientEvent> = json.decodeFromString(serializer, data)
+  if (esc) {
+    element("#pressEsc").click()
+  }
+  if (f != null) {
+    val fId = f.ordinal - Keys.F1.ordinal + 1
+    element("#toggleFunctionalKeys").click()
+    element("#pressF$fId").click()
+  }
 
-  fun deserializeFromRelay(data: String): RelayControlEvent = json.decodeFromString(RelayControlEvent.serializer(), data)
+  if (shift) {
+    element("#toggleShift").click()
+  }
+  if (ctrl) {
+    element("#toggleCtrl").click()
+  }
 }

@@ -21,19 +21,21 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.jetbrains.projector.common.protocol.toServer
+package org.jetbrains.projector.server.core.websocket
 
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
+import org.java_websocket.WebSocket
+import java.nio.ByteBuffer
 
-object KotlinxJsonClientEventSerializer {
+public interface HttpWsTransport {
+  public val wasStarted: Boolean
+  public fun start()
+  public fun stop(timeout: Int = 0)
+  public fun forEachOpenedConnection(action: (client: WebSocket) -> Unit)
 
-  private val json = Json {}
-
-  private val serializer = ListSerializer(ClientEvent.serializer())
-
-  fun serializeList(msg: List<ClientEvent>): String = json.encodeToString(serializer, msg)
-  fun deserializeList(data: String): List<ClientEvent> = json.decodeFromString(serializer, data)
-
-  fun deserializeFromRelay(data: String): RelayControlEvent = json.decodeFromString(RelayControlEvent.serializer(), data)
+  public fun onStart()
+  public fun onError(connection: WebSocket?, e: Exception)
+  public fun onWsOpen(connection: WebSocket)
+  public fun onWsClose(connection: WebSocket)
+  public fun onWsMessage(connection: WebSocket, message: String)
+  public fun onWsMessage(connection: WebSocket, message: ByteBuffer)
 }

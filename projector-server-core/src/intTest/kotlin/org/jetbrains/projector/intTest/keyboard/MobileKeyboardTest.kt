@@ -21,19 +21,22 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.jetbrains.projector.common.protocol.toServer
+package org.jetbrains.projector.intTest.keyboard
 
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
+import org.openqa.selenium.Keys
+import kotlin.test.Ignore
+import kotlin.test.Test
 
-object KotlinxJsonClientEventSerializer {
+class MobileKeyboardTest : AbstractKeyboardTest("mobile") {
 
-  private val json = Json {}
+  override fun input(vararg keysToSend: CharSequence, ctrl: Boolean, shift: Boolean, f: Keys?, esc: Boolean) {
+    activateMobileKeyboard()
+    inputWithMobileButtons(*keysToSend, ctrl = ctrl, shift = shift, f = f, esc = esc)
+  }
 
-  private val serializer = ListSerializer(ClientEvent.serializer())
-
-  fun serializeList(msg: List<ClientEvent>): String = json.encodeToString(serializer, msg)
-  fun deserializeList(data: String): List<ClientEvent> = json.decodeFromString(serializer, data)
-
-  fun deserializeFromRelay(data: String): RelayControlEvent = json.decodeFromString(RelayControlEvent.serializer(), data)
+  @Test
+  @Ignore("need to somehow determine on the client that exactly numpad5 is sent, not plain5")
+  override fun testNumpadWithNumLock() {
+    // todo
+  }
 }

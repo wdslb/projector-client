@@ -21,19 +21,20 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.jetbrains.projector.common.protocol.toServer
+package org.jetbrains.projector.server.core.websocket
 
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
+public class MultiTransportBuilder(private val builders: List<TransportBuilder>) : TransportBuilder() {
+  override fun build(): HttpWsTransport {
+    val transports = builders.map { prepareBuilder(it) }.map { it.build() }
+    return MultiTransport(transports)
+  }
 
-object KotlinxJsonClientEventSerializer {
-
-  private val json = Json {}
-
-  private val serializer = ListSerializer(ClientEvent.serializer())
-
-  fun serializeList(msg: List<ClientEvent>): String = json.encodeToString(serializer, msg)
-  fun deserializeList(data: String): List<ClientEvent> = json.decodeFromString(serializer, data)
-
-  fun deserializeFromRelay(data: String): RelayControlEvent = json.decodeFromString(RelayControlEvent.serializer(), data)
+  private fun prepareBuilder(builder: TransportBuilder) = builder.apply {
+    onStart = this@MultiTransportBuilder.onStart
+    onError = this@MultiTransportBuilder.onError
+    onWsOpen = this@MultiTransportBuilder.onWsOpen
+    onWsClose = this@MultiTransportBuilder.onWsClose
+    onWsMessageString = this@MultiTransportBuilder.onWsMessageString
+    onWsMessageByteBuffer = this@MultiTransportBuilder.onWsMessageByteBuffer
+  }
 }

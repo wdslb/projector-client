@@ -21,19 +21,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.jetbrains.projector.common.protocol.toServer
+package org.jetbrains.projector.intTest.keyboard
 
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
+import org.openqa.selenium.Keys
 
-object KotlinxJsonClientEventSerializer {
+class ImeKeyboardTest : AbstractKeyboardTest("ime") {
 
-  private val json = Json {}
-
-  private val serializer = ListSerializer(ClientEvent.serializer())
-
-  fun serializeList(msg: List<ClientEvent>): String = json.encodeToString(serializer, msg)
-  fun deserializeList(data: String): List<ClientEvent> = json.decodeFromString(serializer, data)
-
-  fun deserializeFromRelay(data: String): RelayControlEvent = json.decodeFromString(RelayControlEvent.serializer(), data)
+  override fun input(vararg keysToSend: CharSequence, ctrl: Boolean, shift: Boolean, f: Keys?, esc: Boolean) {
+    inputOnDesktop(*keysToSend, ctrl = ctrl, shift = shift, f = f, esc = esc)
+  }
 }

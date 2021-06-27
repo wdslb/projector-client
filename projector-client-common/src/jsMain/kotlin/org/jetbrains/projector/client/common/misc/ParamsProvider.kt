@@ -34,13 +34,13 @@ actual object ParamsProvider {
     else -> hostname
   }
 
+  private fun protocolPort(): String {
+    return if (window.location.protocol == "https:") "443" else "80"
+  }
+
   private fun getCurrentPort(): String {
     val port = window.location.port
-
-    if (port == "")
-      if (window.location.protocol == "https:") return "443" else return "80"
-    else
-      return port
+    return if (port.isEmpty()) protocolPort() else port
   }
 
   private val DEFAULT_HOST = getCurrentHostname()
@@ -64,6 +64,8 @@ actual object ParamsProvider {
   actual val CLIPPING_BORDERS: Boolean
   val HOST: String
   val PORT: String
+  val RELAY_SERVER_ID: String?
+  val ENABLE_RELAY: Boolean get() = RELAY_SERVER_ID != null
   actual val LOG_UNSUPPORTED_EVENTS: Boolean
   val DOUBLE_BUFFERING: Boolean
   val ENABLE_COMPRESSION: Boolean
@@ -93,9 +95,10 @@ actual object ParamsProvider {
 
   init {
     with(URL(window.location.href)) {
+      RELAY_SERVER_ID = searchParams.get("relayServerId")
       CLIPPING_BORDERS = searchParams.has("clipping")
       HOST = searchParams.get("host") ?: DEFAULT_HOST
-      PORT = searchParams.get("port") ?: DEFAULT_PORT
+      PORT = searchParams.get("port") ?: if (ENABLE_RELAY) protocolPort() else DEFAULT_PORT
       LOG_UNSUPPORTED_EVENTS = searchParams.has("logUnsupportedEvents")
       DOUBLE_BUFFERING = searchParams.has("doubleBuffering")
       ENABLE_COMPRESSION = searchParams.has("enableCompression")
@@ -135,7 +138,7 @@ actual object ParamsProvider {
             "onlyButtons" -> InputMethodType.OVERLAY_BUTTONS
             else -> InputMethodType.OVERLAY_BUTTONS_N_VIRTUAL_KEYBOARD
           }
-          false -> InputMethodType.IME
+          false -> InputMethodType.LEGACY
         }
       }
       IDE_WINDOW_ID = searchParams.get("ideWindow")?.toIntOrNull()

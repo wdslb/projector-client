@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.jetbrains.projector.server.core.util
+package org.jetbrains.projector.server.core.websocket
 
 import org.java_websocket.WebSocket
 import org.java_websocket.WebSocketImpl
@@ -34,6 +34,10 @@ import org.java_websocket.framing.Framedata
 import org.java_websocket.handshake.*
 import org.java_websocket.server.WebSocketServer
 import org.java_websocket.util.Charsetfunctions
+import org.jetbrains.projector.common.protocol.toClient.MainWindow
+import org.jetbrains.projector.common.protocol.toClient.toJson
+import org.jetbrains.projector.server.core.util.getWildcardHostAddress
+import org.jetbrains.projector.util.logging.Logger
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
@@ -50,9 +54,45 @@ public class GetRequestResult(
 
 private val ClientHandshake.isHttp: Boolean get() = this.getFieldValue("Upgrade").isNullOrBlank()
 
-public abstract class HttpWsServer(host: InetAddress, port: Int) {
+public abstract class HttpWsServer(host: InetAddress, port: Int) : HttpWsTransport {
 
   public constructor(port: Int) : this(getWildcardHostAddress(), port)
+
+  public abstract fun getMainWindows(): List<MainWindow>
+
+  public fun onGetRequest(path: String): GetRequestResult {
+    val pathWithoutParams = path.substringBefore('?').substringBefore('#')
+
+    if (pathWithoutParams == "/mainWindows") {
+      val mainWindows = getMainWindows()
+      val json = mainWindows.toJson().toByteArray()
+      return GetRequestResult(
+        statusCode = 200,
+        statusText = "OK",
+        contentType = "text/json",
+        content = json,
+      )
+    }
+
+    val resourceFileName = getResourceName(pathWithoutParams)
+    val resourceBytes = getResource(resourceFileName)
+
+    if (resourceBytes != null) {
+      return GetRequestResult(
+        statusCode = 200,
+        statusText = "OK",
+        contentType = resourceFileName.calculateContentType(),
+        content = resourceBytes,
+      )
+    }
+
+    return GetRequestResult(
+      statusCode = 404,
+      statusText = "Not found",
+      contentType = "text/html",
+      content = "<h1>404 Not found requested path: $path</h1>".toByteArray(),
+    )
+  }
 
   private inner class HttpDraft : Draft() {
 
@@ -69,7 +109,7 @@ public abstract class HttpWsServer(host: InetAddress, port: Int) {
     }
 
     override fun createHandshake(handshakedata: Handshakedata, withcontent: Boolean): List<ByteBuffer> {
-      val result = this@HttpWsServer.onGetRequest(handshakedata.getFieldValue(PATH_FIELD))
+      val result = onGetRequest(handshakedata.getFieldValue(PATH_FIELD))
 
       val header = Charsetfunctions.asciiBytes(
         "HTTP/1.0 ${result.statusCode} ${result.statusText}\r\n" +
@@ -110,6 +150,7 @@ public abstract class HttpWsServer(host: InetAddress, port: Int) {
   }
 
   private companion object {
+    private val logger = Logger<HttpWsServer>()
 
     private const val PATH_FIELD = "X-My-Path"  // for draft
 
@@ -122,6 +163,44 @@ public abstract class HttpWsServer(host: InetAddress, port: Int) {
       if (connection.getAttachment<Any?>() !== HTTP_CONNECTION_ATTACHMENT) {
         block()
       }
+    }
+
+    private fun String.calculateContentType() = when (this.substringAfterLast('.').toLowerCase()) {
+      "css" -> "text/css"
+      "html" -> "text/html"
+      "js" -> "text/javascript"
+      "png" -> "image/png"
+      "svg" -> "image/svg+xml"
+      "webmanifest" -> "application/manifest+json"
+      else -> "application/octet-stream"
+    }
+
+    fun getResourceName(pathWithoutParams: String) = pathWithoutParams
+      .let {
+        // support paths from old docker instructions
+        when (it.startsWith("/projector/")) {
+          true -> it.removePrefix("/projector")
+          false -> it
+        }
+      }
+      .let {
+        // support paths for PWA (start_url from webmanifest) – it's the name of repo so PWA could work for GH Pages too
+        when (it.startsWith("/projector-client/")) {
+          true -> it.removePrefix("/projector-client")
+          false -> it
+        }
+      }
+      .let {
+        // support root
+        when (it == "/") {
+          true -> "/index.html"
+          false -> it
+        }
+      }
+
+    fun getResource(resourceFileName: String): ByteArray? {
+      // todo: restrict going to upper dirs
+      return this::class.java.getResource("/projector-client-web-distribution$resourceFileName")?.readBytes()
     }
   }
 
@@ -188,6 +267,7 @@ public abstract class HttpWsServer(host: InetAddress, port: Int) {
     }
 
     override fun onStart() {
+      logger.info { "Server started on host $host and port $port" }
       this@HttpWsServer.onStart()
 
       lock.withLock {
@@ -197,30 +277,21 @@ public abstract class HttpWsServer(host: InetAddress, port: Int) {
     }
   }
 
-  public val wasStarted: Boolean by webSocketServer::wasStarted
+  override val wasStarted: Boolean by webSocketServer::wasStarted
 
-  public fun start() {
+  override fun start() {
     webSocketServer.start()
   }
 
-  @JvmOverloads
-  public fun stop(timeout: Int = 0) {
+  override fun stop(timeout: Int) {
     webSocketServer.stop(timeout)
   }
 
-  public fun forEachOpenedConnection(action: (client: WebSocket) -> Unit) {
+  override fun forEachOpenedConnection(action: (client: WebSocket) -> Unit) {
     webSocketServer.connections.filter(WebSocket::isOpen).forEach(action)
   }
 
   public fun setWebSocketFactory(factory: WebSocketServerFactory) {
     webSocketServer.setWebSocketFactory(factory)
   }
-
-  public abstract fun onStart()
-  public abstract fun onError(connection: WebSocket?, e: Exception)
-  public abstract fun onWsOpen(connection: WebSocket)
-  public abstract fun onWsClose(connection: WebSocket)
-  public abstract fun onWsMessage(connection: WebSocket, message: String)
-  public abstract fun onWsMessage(connection: WebSocket, message: ByteBuffer)
-  public abstract fun onGetRequest(path: String): GetRequestResult
 }

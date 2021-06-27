@@ -21,19 +21,38 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.jetbrains.projector.common.protocol.toServer
+package org.jetbrains.projector.server.core.websocket
 
-import kotlinx.serialization.builtins.ListSerializer
-import kotlinx.serialization.json.Json
+import org.java_websocket.WebSocket
+import java.nio.ByteBuffer
 
-object KotlinxJsonClientEventSerializer {
+public class HttpWsClientBuilder(private val relayUrl: String, private val serverId: String) : TransportBuilder() {
 
-  private val json = Json {}
+  override fun build(): HttpWsClient {
+    return object : HttpWsClient(relayUrl, serverId) {
+      override fun onStart() {
+        this@HttpWsClientBuilder.onStart()
+      }
 
-  private val serializer = ListSerializer(ClientEvent.serializer())
+      override fun onError(connection: WebSocket?, e: Exception) {
+        this@HttpWsClientBuilder.onError(connection, e)
+      }
 
-  fun serializeList(msg: List<ClientEvent>): String = json.encodeToString(serializer, msg)
-  fun deserializeList(data: String): List<ClientEvent> = json.decodeFromString(serializer, data)
+      override fun onWsOpen(connection: WebSocket) {
+        this@HttpWsClientBuilder.onWsOpen(connection)
+      }
 
-  fun deserializeFromRelay(data: String): RelayControlEvent = json.decodeFromString(RelayControlEvent.serializer(), data)
+      override fun onWsClose(connection: WebSocket) {
+        this@HttpWsClientBuilder.onWsClose(connection)
+      }
+
+      override fun onWsMessage(connection: WebSocket, message: String) {
+        this@HttpWsClientBuilder.onWsMessageString(connection, message)
+      }
+
+      override fun onWsMessage(connection: WebSocket, message: ByteBuffer) {
+        this@HttpWsClientBuilder.onWsMessageByteBuffer(connection, message)
+      }
+    }
+  }
 }
