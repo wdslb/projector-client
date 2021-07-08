@@ -31,6 +31,7 @@ val coroutinesVersion: String by project
 val inlineStylePrefixerVersion: String by project
 val kotlinReactVersion: String by project
 val kotlinStyledComponentsVersion: String by project
+val kotlinVersion: String by project
 val radiumVersion: String by project
 val reactVersion: String by project
 val reactLoadingIndicatorVersion: String by project
@@ -46,11 +47,13 @@ dependencies {
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:$serializationVersion")
   implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
 
-  implementation("org.jetbrains:kotlin-react:$kotlinReactVersion")
-  implementation("org.jetbrains:kotlin-react-dom:$kotlinReactVersion")
-  implementation("org.jetbrains:kotlin-styled:$kotlinStyledComponentsVersion")
+  implementation("org.jetbrains.kotlin-wrappers:kotlin-react:$kotlinReactVersion")
+  implementation("org.jetbrains.kotlin-wrappers:kotlin-react-dom:$kotlinReactVersion")
+  implementation("org.jetbrains.kotlin-wrappers:kotlin-styled:$kotlinStyledComponentsVersion")
   implementation(npm("radium", radiumVersion))
   implementation(npm("react-loading-indicator", reactLoadingIndicatorVersion))
+
+  testImplementation(kotlin("test", kotlinVersion))
 }
 
 kotlin {

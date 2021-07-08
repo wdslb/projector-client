@@ -58,8 +58,6 @@ class ProjectorHttpWsServerTest {
 
     private fun createServer() = object : HttpWsServer(PORT) {
 
-      override fun onStart() {}
-
       override fun onError(connection: WebSocket?, e: Exception) {}
 
       override fun onWsOpen(connection: WebSocket) {
@@ -104,7 +102,9 @@ class ProjectorHttpWsServerTest {
   @Test
   fun test404() {
     val server = createServer().also { it.start() }
-    val client = HttpClient()
+    val client = HttpClient {
+      expectSuccess = false
+    }
 
     val response = runBlocking { client.get<HttpResponse>(prj("/abc")) }
 

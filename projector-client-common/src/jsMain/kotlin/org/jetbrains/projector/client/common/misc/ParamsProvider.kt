@@ -34,6 +34,11 @@ actual object ParamsProvider {
     else -> hostname
   }
 
+  private fun getCurrentPath(): String = when (window.location.protocol) {
+    "file:" -> ""
+    else -> window.location.pathname
+  }
+
   private fun protocolPort(): String {
     return if (window.location.protocol == "https:") "443" else "80"
   }
@@ -45,6 +50,10 @@ actual object ParamsProvider {
 
   private val DEFAULT_HOST = getCurrentHostname()
   private val DEFAULT_PORT = getCurrentPort()
+  private val DEFAULT_PATH = when (getCurrentHostname()) {
+    "projector.jetbrains.com" -> ""
+    else -> getCurrentPath()
+  }
   private val DEFAULT_TO_CLIENT_FORMAT: ToClientFormat = ToClientFormat.KOTLINX_JSON_MANUAL
   private const val DEFAULT_IMAGE_TTL = 60_000.0  // in ms
   private const val DEFAULT_FLUSH_DELAY = 1
@@ -64,6 +73,7 @@ actual object ParamsProvider {
   actual val CLIPPING_BORDERS: Boolean
   val HOST: String
   val PORT: String
+  val PATH: String
   val RELAY_SERVER_ID: String?
   val ENABLE_RELAY: Boolean get() = RELAY_SERVER_ID != null
   actual val LOG_UNSUPPORTED_EVENTS: Boolean
@@ -99,6 +109,7 @@ actual object ParamsProvider {
       CLIPPING_BORDERS = searchParams.has("clipping")
       HOST = searchParams.get("host") ?: DEFAULT_HOST
       PORT = searchParams.get("port") ?: if (ENABLE_RELAY) protocolPort() else DEFAULT_PORT
+      PATH = searchParams.get("path") ?: DEFAULT_PATH
       LOG_UNSUPPORTED_EVENTS = searchParams.has("logUnsupportedEvents")
       DOUBLE_BUFFERING = searchParams.has("doubleBuffering")
       ENABLE_COMPRESSION = searchParams.has("enableCompression")
@@ -138,7 +149,7 @@ actual object ParamsProvider {
             "onlyButtons" -> InputMethodType.OVERLAY_BUTTONS
             else -> InputMethodType.OVERLAY_BUTTONS_N_VIRTUAL_KEYBOARD
           }
-          false -> InputMethodType.LEGACY
+          false -> InputMethodType.IME
         }
       }
       IDE_WINDOW_ID = searchParams.get("ideWindow")?.toIntOrNull()

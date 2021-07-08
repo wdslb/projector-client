@@ -32,14 +32,15 @@ Tested browsers:
 You can set some settings in query parameters like this: `index.html?host=localhost&port=8887&wss`. Actual list of parameters can be found in the `ParamsProvider.kt` file. Here we describe them.
 
 ### Main parameters
-Name | Type | Default value | Description 
+Name | Type | Default value | Description
 ---|---|---|---
 `host` | String | Host of the web page | Set the host of `projector-server` to connect.
-`port` | String | `8887` | Set the port of `projector-server` to connect.
+`port` | String | Port of the web page | Set the port of `projector-server` to connect.
+`path` | String | Path of the web page | Set the path of `projector-server` to connect.
 `wss` | Presence | Protocol of the web page | Enable security of WebSocket connection.
 `notSecureWarning` | Boolean | `true` | Enable warning saying that the context is not [secure](https://developer.mozilla.org/en-US/docs/Web/Security/Secure_Contexts).
 `token` | String? | Not present | Set a password which will be checked by the server on the connection.
-`inputMethod` | String? | `legacy` | `ime` supports Input Methods. `mobileOnlyButtons` – enable overlay controls handy for mobile devices. `mobile` – enable overlay controls and a virtual keyboard toggle handy for mobile devices. `legacy` doesn't support input methods.
+`inputMethod` | String? | `ime` | `ime` supports Input Method Editors and Dead Keys. `mobileOnlyButtons` – enable overlay controls handy for mobile devices. `mobile` – enable overlay controls and a virtual keyboard toggle handy for mobile devices. `legacy` doesn't support input methods.
 `ideWindow` | Int? | Not present | Specify the IDE window ID to show. The first ID is `0`. If not presented, all IDE windows are shown.
 `layout` | Enum (String) | `jsDefault` | Specify keyboard layout. Possible values: `jsDefault`, `frAzerty`.
 
