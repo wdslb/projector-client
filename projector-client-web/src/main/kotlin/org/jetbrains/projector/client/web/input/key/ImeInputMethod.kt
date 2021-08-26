@@ -24,7 +24,11 @@
 package org.jetbrains.projector.client.web.input.key
 
 import kotlinx.browser.document
+import kotlinx.browser.window
 import org.jetbrains.projector.client.common.misc.TimeStamp
+import org.jetbrains.projector.client.web.window.Positionable
+import org.jetbrains.projector.common.misc.Do
+import org.jetbrains.projector.common.protocol.toClient.ServerCaretInfoChangedEvent
 import org.jetbrains.projector.common.protocol.toServer.ClientEvent
 import org.jetbrains.projector.common.protocol.toServer.ClientKeyEvent.KeyEventType.DOWN
 import org.jetbrains.projector.common.protocol.toServer.ClientKeyEvent.KeyEventType.UP
@@ -40,6 +44,7 @@ import kotlin.math.roundToInt
 class ImeInputMethod(
   openingTimeStamp: Int,
   clientEventConsumer: (ClientEvent) -> Unit,
+  private val windowPositionByIdGetter: (windowId: Int) -> Positionable?,
 ) : InputMethod {
 
   private val handler = ImeInputMethodEventHandler(
@@ -51,6 +56,12 @@ class ImeInputMethod(
   private val inputField = (document.createElement("textarea") as HTMLTextAreaElement).apply {
     style.apply {
       position = "fixed"
+      background = "none"
+      border = "none"
+      resize = "none"
+      outline = "none"
+      color = "transparent"  // remove the caret
+      width = "100%"
       bottom = "-30%"
       left = "50%"
     }
@@ -59,8 +70,8 @@ class ImeInputMethod(
     asDynamic().autocapitalize = "none"
 
     onblur = {
-      this.focus()
-      this.click()
+      window.setTimeout(::focusInputField, 0) // https://stackoverflow.com/questions/7046798/jquery-focus-fails-on-firefox
+      focusInputField()  // make keyboard int tests work in Chromium
     }
 
     addEventListener("compositionstart", handler::handleEvent)
@@ -85,12 +96,50 @@ class ImeInputMethod(
   }
 
   init {
+    focusInputField()
+  }
+
+  private fun focusInputField() {
     inputField.focus()
     inputField.click()
   }
 
   override fun dispose() {
     inputField.remove()
+  }
+
+  override fun handleCaretInfoChange(caretInfoChange: ServerCaretInfoChangedEvent.CaretInfoChange) {
+    fun resetInputFieldPosition() {
+      inputField.style.apply {
+        top = "-30%"
+        left = "50%"
+      }
+    }
+
+    Do exhaustive when (caretInfoChange) {
+      is ServerCaretInfoChangedEvent.CaretInfoChange.NoCarets -> resetInputFieldPosition()
+
+      is ServerCaretInfoChangedEvent.CaretInfoChange.Carets -> {
+        val windowPosition = windowPositionByIdGetter(caretInfoChange.editorWindowId) ?: run {
+          console.warn("Can't find window with ID #${caretInfoChange.editorWindowId}, resetting input field position")
+          resetInputFieldPosition()
+          return
+        }
+        val caretInfo = caretInfoChange.caretInfoList.first()  // todo: support all
+        val x = caretInfo.locationInWindow.x + windowPosition.bounds.x
+        val y = caretInfo.locationInWindow.y + windowPosition.bounds.y
+
+        inputField.style.apply {
+          zIndex = "${windowPosition.zIndex + 1}"
+          top = "${y}px"
+          removeProperty("bottom")
+          left = "${x}px"
+          fontSize = "${caretInfoChange.fontSize}px"
+          textShadow = "0 0 0 #888"  // use text shadow to set text color to avoid showing caret // todo: set correct color
+          // todo: style other things like font family
+        }
+      }
+    }
   }
 }
 

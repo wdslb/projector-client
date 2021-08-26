@@ -47,3 +47,7 @@ kotlin {
     }
   }
 }
+
+publishing {
+  publishOnSpace(project, "kotlin")
+}

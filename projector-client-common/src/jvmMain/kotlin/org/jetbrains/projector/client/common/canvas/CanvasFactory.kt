@@ -23,24 +23,36 @@
  */
 package org.jetbrains.projector.client.common.canvas
 
-import java.io.ByteArrayInputStream
-import java.util.*
-import javax.imageio.ImageIO
-
 actual object CanvasFactory {
-  actual fun create(): Canvas {
-    return SwingCanvas()
+  @Suppress("MemberVisibilityCanBePrivate") // it's intended to be modifiable
+  var factoryImpl: CanvasFactoryJvm = DummyCanvasFactoryJvm()
+
+  actual fun create() = factoryImpl.create()
+  actual fun createImageSource(pngBase64: String, onLoad: (Canvas.ImageSource) -> Unit) = factoryImpl.createImageSource(pngBase64, onLoad)
+  actual fun createEmptyImageSource(onLoad: (Canvas.ImageSource) -> Unit) = factoryImpl.createEmptyImageSource(onLoad)
+}
+
+interface CanvasFactoryJvm {
+  fun create(): Canvas
+  fun createImageSource(pngBase64: String, onLoad: (Canvas.ImageSource) -> Unit)
+  fun createEmptyImageSource(onLoad: (Canvas.ImageSource) -> Unit)
+}
+
+internal class DummyCanvasFactoryJvm : CanvasFactoryJvm {
+  internal class DummyCanvas: Canvas {
+    override val context2d: Context2d
+      get() = error("DummyCanvas has no context2d")
+    override var width: Int = 1
+    override var height: Int = 1
+    override val imageSource = DummyImageSource()
+    override fun takeSnapshot() = DummyImageSource()
   }
 
-  actual fun createImageSource(
-    pngBase64: String,
-    onLoad: (Canvas.ImageSource) -> Unit,
-  ) {
-    val image = ImageIO.read(ByteArrayInputStream(Base64.getDecoder().decode(pngBase64)))
-    onLoad(SwingCanvas.SwingImageSource(image))
+  internal class DummyImageSource : Canvas.Snapshot {
+    override fun isEmpty() = true
   }
 
-  actual fun createEmptyImageSource(onLoad: (Canvas.ImageSource) -> Unit) {
-    onLoad(SwingCanvas.SwingImageSource())
-  }
+  override fun create() = DummyCanvas()
+  override fun createImageSource(pngBase64: String, onLoad: (Canvas.ImageSource) -> Unit) = onLoad(DummyImageSource())
+  override fun createEmptyImageSource(onLoad: (Canvas.ImageSource) -> Unit) = onLoad(DummyImageSource())
 }

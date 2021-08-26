@@ -314,6 +314,7 @@ sealed class ClientState {
           decompressor = decompressor,
           compressor = compressor,
           layers = layers,
+          ImageCacher()
         )
       }
 
@@ -331,11 +332,12 @@ sealed class ClientState {
     private val decompressor: MessageDecompressor<ByteArray>,
     private val compressor: MessageCompressor<String>,
     private val layers: AppLayers,
+    private val imageCacher: ImageCacher
   ) : ClientState() {
 
     private val eventsToSend = mutableListOf<ClientEvent>(ClientSetKeymapEvent(nativeKeymap))
 
-    private val windowManager = WindowManager(stateMachine)
+    private val windowManager = WindowManager(stateMachine, imageCacher)
 
     private val windowDataEventsProcessor = WindowDataEventsProcessor(windowManager)
 
@@ -387,7 +389,8 @@ sealed class ClientState {
     private val inputController = InputController(
       openingTimeStamp = openingTimeStamp,
       stateMachine = stateMachine,
-      windowManager = windowManager
+      windowManager = windowManager,
+      windowPositionByIdGetter = windowManager::get,
     ).apply {
       addListeners()
     }
@@ -430,12 +433,12 @@ sealed class ClientState {
         val decompressTimeStamp = TimeStamp.current
         val commands = decoder.decode(decompressed)
         val decodeTimestamp = TimeStamp.current
-        serverEventsProcessor.process(commands, pingStatistics, typing, markdownPanelManager)
+        serverEventsProcessor.process(commands, pingStatistics, typing, markdownPanelManager, inputController)
         val drawTimestamp = TimeStamp.current
 
-        ImageCacher.collectGarbage()
+        imageCacher.collectGarbage()
 
-        eventsToSend.addAll(ImageCacher.extractImagesToRequest())
+        eventsToSend.addAll(imageCacher.extractImagesToRequest())
 
         messagingPolicy.onToClientMessage()
         sentReceivedBadgeShower.onToClientMessage()
@@ -500,7 +503,7 @@ sealed class ClientState {
         val event = action.event
 
         if (event is ClientKeyPressEvent) {
-          typing.addChar(event.char)
+          typing.addEventChar(event)
         }
 
         eventsToSend.add(event)

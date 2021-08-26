@@ -31,13 +31,16 @@ plugins {
 
 val kotlinVersion: String by project
 val targetJvm: String by project
+val publishingVersion: String by project
 
 subprojects {
-  group = "org.jetbrains"
-  version = "1.0-SNAPSHOT"
+  group = "org.jetbrains.projector"
+  version = publishingVersion
 
   repositories {
     mavenCentral()
+    maven("https://www.jetbrains.com/intellij-repository/releases")
+    maven("https://cache-redirector.jetbrains.com/intellij-dependencies")
   }
 
   tasks.withType<JavaCompile> {

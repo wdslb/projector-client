@@ -93,9 +93,10 @@ object ManualJsonToClientMessageDecoder : ToClientMessageDecoder {
         content["b"] as Short?,
         content["c"] as Int,
         content["d"] as Int,
-        content["e"] as Float,
+        content["e"].unsafeCast<Json>().toCommonRectangle(),
         content["f"] as Int,
-        content["g"].unsafeCast<Json>().toCommonRectangle()
+        content["g"] as Int,
+        content["h"] as Int,
       )
       else -> throw IllegalArgumentException("Unsupported caret info type: ${JSON.stringify(this)}")
     }

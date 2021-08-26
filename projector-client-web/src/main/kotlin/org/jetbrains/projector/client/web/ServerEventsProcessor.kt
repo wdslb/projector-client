@@ -27,6 +27,7 @@ import kotlinx.browser.window
 import org.jetbrains.projector.client.common.SingleRenderingSurfaceProcessor.Companion.shrinkByPaintEvents
 import org.jetbrains.projector.client.common.misc.ImageCacher
 import org.jetbrains.projector.client.web.component.MarkdownPanelManager
+import org.jetbrains.projector.client.web.input.InputController
 import org.jetbrains.projector.client.web.misc.PingStatistics
 import org.jetbrains.projector.client.web.speculative.Typing
 import org.jetbrains.projector.client.web.state.ProjectorUI
@@ -40,7 +41,8 @@ import org.w3c.dom.url.URL
 class ServerEventsProcessor(private val windowDataEventsProcessor: WindowDataEventsProcessor) {
 
   @OptIn(ExperimentalStdlibApi::class)
-  fun process(commands: ToClientMessageType, pingStatistics: PingStatistics, typing: Typing, markdownPanelManager: MarkdownPanelManager) {
+  fun process(commands: ToClientMessageType, pingStatistics: PingStatistics, typing: Typing, markdownPanelManager: MarkdownPanelManager,
+              inputController: InputController) {
     val drawCommandsEvents = mutableListOf<ServerDrawCommandsEvent>()
 
     commands.forEach { command ->
@@ -52,12 +54,15 @@ class ServerEventsProcessor(private val windowDataEventsProcessor: WindowDataEve
 
         is ServerDrawCommandsEvent -> drawCommandsEvents.add(command)
 
-        is ServerImageDataReplyEvent -> ImageCacher.putImageData(
+        is ServerImageDataReplyEvent -> windowDataEventsProcessor.windowManager.imageCacher.putImageData(
           command.imageId,
           command.imageData,
         )
 
-        is ServerCaretInfoChangedEvent -> typing.changeCaretInfo(command.data)
+        is ServerCaretInfoChangedEvent -> {
+          typing.changeCaretInfo(command.data)
+          inputController.handleCaretInfoChange(command.data)
+        }
 
         is ServerClipboardEvent -> handleServerClipboardChange(command)
 
@@ -95,7 +100,7 @@ class ServerEventsProcessor(private val windowDataEventsProcessor: WindowDataEve
         is ServerDrawCommandsEvent.Target.Onscreen -> windowDataEventsProcessor.draw(target.windowId, event.drawEvents)
 
         is ServerDrawCommandsEvent.Target.Offscreen -> {
-          val offscreenProcessor = ImageCacher.getOffscreenProcessor(target)
+          val offscreenProcessor = windowDataEventsProcessor.windowManager.imageCacher.getOffscreenProcessor(target)
 
           val drawEvents = event.drawEvents.shrinkByPaintEvents()
 

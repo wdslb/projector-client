@@ -20,7 +20,6 @@ theme:
     - navigation.expand
     - navigation.instant
     - navigation.sections
-    - toc.integrate
   palette:
     primary: white
 
@@ -29,9 +28,10 @@ extra:
     - icon: fontawesome/brands/github
       # TODO: rename to "projector"?
       link: https://github.com/JetBrains/projector-client
-      # TODO: other sites?
-#    - type: 'twitter'
-#      link: 'https://twitter.com/you'
+    - icon: fontawesome/brands/twitter
+      link: 'https://twitter.com/ProjectorJB'
+    - icon: fontawesome/solid/globe
+      link: 'https://projector.jetbrains.com'
 
 plugins:
   - search
@@ -72,10 +72,12 @@ nav:
       - JetBrains IDEs: ij_user_guide/jetbrains.md
       - Running remote app – servers: ij_user_guide/running.md
       - Accessing remote app – clients: ij_user_guide/accessing.md
+      - Customizing servers: ij_user_guide/server_customization.md
   - User guide – other Swing apps:
       - Arbitrary Swing app: swing_user_guide/arbitrary.md
   - Developer guide:
       - Ecosystem: dev_guide/ecosystem.md
+      - Projector ClassLoader: dev_guide/classloader.md
       - Academic works: dev_guide/works.md
   - About:
       - Comparison to other remote access solutions: about/comparison.md
