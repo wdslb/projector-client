@@ -23,45 +23,21 @@
  */
 package org.jetbrains.projector.agent.ijInjector
 
-import javassist.ClassPool
-import javassist.LoaderClassPath
-import org.jetbrains.projector.agent.common.getClassFromClassfileBuffer
-import org.jetbrains.projector.util.logging.Logger
-import java.lang.instrument.ClassFileTransformer
-import java.security.ProtectionDomain
+import com.intellij.util.ui.UIUtil
+import javassist.CtClass
+import org.jetbrains.projector.agent.common.transformation.TransformerSetupBase
 
-internal class IjUiUtilsTransformer private constructor(
-  private val ideCp: ClassPool,
-) : ClassFileTransformer {
+internal object IjUiUtilsTransformer : TransformerSetupBase<IjInjector.AgentParameters>() {
 
-  override fun transform(
-    loader: ClassLoader,
-    className: String,
-    classBeingRedefined: Class<*>?,
-    protectionDomain: ProtectionDomain?,
-    classfileBuffer: ByteArray,
-  ): ByteArray? {
-    return transformClass(className, classfileBuffer)
+  override val classTransformations: Map<Class<*>, (CtClass) -> ByteArray?> = mapOf(
+    UIUtil::class.java to ::transformUiUtil,
+  )
+
+  override fun isTransformerAvailable(parameters: IjInjector.AgentParameters): Boolean {
+    return !parameters.isAgent
   }
 
-  private fun transformClass(className: String, classfileBuffer: ByteArray): ByteArray? {
-    return try {
-      when (className) {
-        uiUtilPath -> transformUiUtil(className, classfileBuffer)
-
-        else -> classfileBuffer
-      }
-    }
-    catch (e: Exception) {
-      logger.error(e) { "Class transform error" }
-      null
-    }
-  }
-
-  private fun transformUiUtil(className: String, classfileBuffer: ByteArray): ByteArray {
-    logger.debug { "Transforming UIUtil..." }
-    val clazz = getClassFromClassfileBuffer(ideCp, className, classfileBuffer)
-    clazz.defrost()
+  private fun transformUiUtil(clazz: CtClass): ByteArray {
 
     // like in javax.swing.text.DefaultEditorKit.DefaultKeyTypedAction:
     clazz
@@ -73,6 +49,7 @@ internal class IjUiUtilsTransformer private constructor(
             boolean isPrintableMask = true;
             final java.awt.Toolkit tk = java.awt.Toolkit.getDefaultToolkit();
             if (tk instanceof sun.awt.SunToolkit) {
+              //noinspection deprecation // copied from javax.swing.text.DefaultEditorKit.DefaultKeyTypedAction
               final int mod = $1.getModifiers();
               isPrintableMask = ((sun.awt.SunToolkit) tk).isPrintableCharacterModifiersMask(mod);
             }
@@ -84,46 +61,5 @@ internal class IjUiUtilsTransformer private constructor(
       )
 
     return clazz.toBytecode()
-  }
-
-  companion object {
-
-    private val logger = Logger<IjUiUtilsTransformer>()
-
-    private const val SE_CONTRIBUTOR_EP = "com.intellij.searchEverywhereContributor"
-
-    private const val uiUtilClass = "com.intellij.util.ui.UIUtil"
-    private val uiUtilPath = uiUtilClass.replace('.', '/')
-
-    fun agentmain(
-      utils: IjInjector.Utils,
-    ) {
-      logger.debug { "agentmain start" }
-
-      val extensionPointName = utils.createExtensionPointName(SE_CONTRIBUTOR_EP)
-      val extensions = utils.extensionPointNameGetExtensions(extensionPointName)
-
-      val ideClassloader = extensions.filterNotNull().first()::class.java.classLoader
-
-      val ideCp = ClassPool().apply {
-        appendClassPath(LoaderClassPath(ideClassloader))
-      }
-      val transformer = IjUiUtilsTransformer(ideCp)
-
-      utils.instrumentation.addTransformer(transformer, true)
-
-      listOf(
-        uiUtilClass,
-      ).forEach { clazz ->
-        try {
-          utils.instrumentation.retransformClasses(Class.forName(clazz, false, ideClassloader))
-        }
-        catch (t: Throwable) {
-          logger.error(t) { "Class retransform error" }
-        }
-      }
-
-      logger.debug { "agentmain finish" }
-    }
   }
 }

@@ -24,13 +24,16 @@
 package org.jetbrains.projector.server.core.websocket
 
 import org.java_websocket.WebSocket
+import org.jetbrains.projector.server.core.ServerTransport
 import java.nio.ByteBuffer
 
-public interface HttpWsTransport {
-  public val wasStarted: Boolean
-  public fun start()
-  public fun stop(timeout: Int = 0)
-  public fun forEachOpenedConnection(action: (client: WebSocket) -> Unit)
+public interface HttpWsTransport : ServerTransport {
+  override val clientCount: Int
+    get() {
+      var count = 0
+      forEachOpenedConnection { count++ }
+      return count
+    }
 
   public fun onError(connection: WebSocket?, e: Exception)
   public fun onWsOpen(connection: WebSocket)

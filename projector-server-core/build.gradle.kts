@@ -36,28 +36,17 @@ kotlin {
   explicitApi()
 }
 
-jacoco {
-  toolVersion = "0.8.7"
-}
+setupJacoco()
+
+publishToSpace("java")
 
 // set project dir for fix gradle bug with jacoco plugin. https://github.com/gradle/gradle/issues/16841
 System.setProperty("user.dir", projectDir.toString())
 
-tasks.withType<JacocoReport> {
-  reports {
-    xml.isEnabled = true
-    xml.destination = file(layout.buildDirectory.dir("../../JacocoReports/jacocoReportServer.xml"))
-    csv.required.set(false)
-    html.outputLocation.set(layout.buildDirectory.dir("jacocoHtmlProjectorServerCore"))
-  }
-}
-
-publishing {
-  publishOnSpace(project, "java")
-}
-
 val coroutinesVersion: String by project
 val dnsjavaVersion: String by project
+val intellijPlatformVersion: String by project
+val intellijMarkdownPluginVersion: String by project
 val javassistVersion: String by project
 val javaWebSocketVersion: String by project
 val jsoupVersion: String by project
@@ -141,7 +130,7 @@ val integrationTest = task<Test>("integrationTest") {
 
 dependencies {
   api(project(":projector-common"))
-  implementation(project(":projector-agent-initialization"))
+  implementation(project(":projector-ij-common"))
   implementation(project(":projector-util-agent"))
   implementation(project(":projector-util-loading"))
   implementation(project(":projector-util-logging"))
@@ -151,7 +140,13 @@ dependencies {
   implementation("dnsjava:dnsjava:$dnsjavaVersion")
   implementation("org.jsoup:jsoup:$jsoupVersion")
 
+  compileOnly("com.jetbrains.intellij.platform:util-class-loader:$intellijPlatformVersion")
+  compileOnly("com.jetbrains.intellij.markdown:markdown:$intellijMarkdownPluginVersion")
+
   testImplementation(kotlin("test", kotlinVersion))
+  testImplementation("com.jetbrains.intellij.markdown:markdown:$intellijMarkdownPluginVersion") {
+    exclude("com.jetbrains.rd")
+  }
 
   intTestImplementation("com.codeborne:selenide:$selenideVersion")
   intTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")

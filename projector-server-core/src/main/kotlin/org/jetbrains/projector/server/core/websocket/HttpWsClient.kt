@@ -30,6 +30,7 @@ import org.java_websocket.handshake.ServerHandshake
 import org.jetbrains.projector.common.protocol.toServer.ClientInControlEvent
 import org.jetbrains.projector.common.protocol.toServer.ClientOutControlEvent
 import org.jetbrains.projector.common.protocol.toServer.KotlinxJsonClientEventSerializer
+import org.jetbrains.projector.server.core.ClientWrapper
 import org.jetbrains.projector.util.logging.Logger
 import java.net.URI
 import java.util.concurrent.locks.ReentrantLock
@@ -75,7 +76,7 @@ public abstract class HttpWsClient(
     }
 
     override fun onMessage(message: String?) {
-      if (message == null || message.isEmpty()) {
+      if (message.isNullOrEmpty()) {
         return
       }
 
@@ -108,13 +109,14 @@ public abstract class HttpWsClient(
     controlWebSocket.connect()
   }
 
-  public override fun stop(timeout: Int) {
+  public override fun stop(timeoutMs: Int) {
     controlWebSocket.close()
   }
 
-  public override fun forEachOpenedConnection(action: (client: WebSocket) -> Unit) {
-    clients.values.forEach {
-      action(it)
+  public override fun forEachOpenedConnection(action: (client: ClientWrapper) -> Unit) {
+    clients.values.filter(WebSocket::isOpen).forEach {
+      val wrapper = it.getAttachment<ClientWrapper>() ?: return@forEachOpenedConnection
+      action(wrapper)
     }
   }
 

@@ -23,40 +23,47 @@
  */
 package org.jetbrains.projector.agent.ijInjector
 
-import com.intellij.openapi.extensions.ExtensionPointName
 import org.jetbrains.projector.agent.init.IjArgs
+import org.jetbrains.projector.util.loading.UseProjectorLoader
 import java.lang.instrument.Instrumentation
 
+@UseProjectorLoader(attachPackage = true)
 internal object IjInjector {
 
-  class Utils(
-    val instrumentation: Instrumentation,
-    val createExtensionPointName: (String) -> ExtensionPointName<*>,
-    val extensionPointNameGetExtensions: (ExtensionPointName<*>) -> Array<*>,
-    val args: Map<String, String>,
+  @Suppress("unused") // classloader provider class name and method names are not currently used, but may be in the future
+  class AgentParameters(
+    val isAgent: Boolean,
+    val classloadersProviderClassName: String,
+    val ideaClassloaderProviderMethodName: String,
+    val projectorClassloaderProviderMethodName: String,
+    val markdownPanelClassName: String,
   )
 
-  private fun createUtils(instrumentation: Instrumentation, args: Map<String, String>): Utils {
+  private fun parametersFromArgs(args: Map<String, String>): AgentParameters {
 
-    return Utils(
-      instrumentation = instrumentation,
-      createExtensionPointName = { ExtensionPointName.create<Any>(it) },
-      extensionPointNameGetExtensions = { it.extensions },
-      args = args
+    return AgentParameters(
+      isAgent = args[IjArgs.IS_AGENT] == "true",
+      classloadersProviderClassName = args.getValue(IjArgs.IJ_CL_PROVIDER_CLASS),
+      ideaClassloaderProviderMethodName = args.getValue(IjArgs.IJ_CL_PROVIDER_METHOD),
+      projectorClassloaderProviderMethodName = args.getValue(IjArgs.PRJ_CL_PROVIDER_METHOD),
+      markdownPanelClassName = args.getValue(IjArgs.MD_PANEL_CLASS),
     )
   }
 
   @JvmStatic
   fun agentmain(instrumentation: Instrumentation, args: Map<String, String>) {
-    val utils = createUtils(instrumentation, args)
+    val parameters = parametersFromArgs(args)
 
-    IjLigaturesDisablerTransformer.agentmain(utils)
+    // TODO: support same transformers in agent mode too to reach feature parity
+    val transformers = listOf(
+      IjLigaturesDisablerTransformer,
+      IjMdTransformer,
+      IjBrowserUtilTransformer,
+      IjUiUtilsTransformer,
+      IjFastNodeCellRendererTransformer,
+      IjRestartDisablerTransformer,
+    )
 
-    val isAgent = args[IjArgs.IS_AGENT] == "true"
-    if (!isAgent) {  // todo: support variant for agent too
-      IjMdTransformer.agentmain(utils)
-      IjBrowserUtilTransformer.agentmain(utils)
-      IjUiUtilsTransformer.agentmain(utils)
-    }
+    BatchTransformer(transformers).runTransformations(instrumentation, parameters)
   }
 }

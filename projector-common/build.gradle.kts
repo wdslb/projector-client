@@ -29,36 +29,10 @@ plugins {
   java
 }
 
-jacoco {
-  toolVersion = "0.8.7"
-}
+setupJacoco(isKotlinMpModule = true)
 
 val kotlinVersion: String by project
 val serializationVersion: String by project
-
-tasks.withType<JacocoReport> {
-  dependsOn("jvmTest")
-  group = "Reporting"
-  description = "Generate Jacoco coverage reports"
-  val coverageSourceDirs = arrayOf(
-    "commonMain/src",
-    "jvmMain/src"
-  )
-  val classFiles = File("${buildDir}/classes/kotlin/jvm/")
-    .walkBottomUp()
-    .toSet()
-  classDirectories.setFrom(classFiles)
-  sourceDirectories.setFrom(files(coverageSourceDirs))
-  additionalSourceDirs.setFrom(files(coverageSourceDirs))
-  executionData
-    .setFrom(files("${buildDir}/jacoco/jvmTest.exec"))
-  reports {
-    xml.isEnabled = true
-    xml.destination = file(layout.buildDirectory.dir("../../JacocoReports/jacocoReportCommon.xml"))
-    csv.required.set(false)
-    html.outputLocation.set(layout.buildDirectory.dir("jacocoHtmlProjectorClient"))
-  }
-}
 
 kotlin {
   js {
@@ -100,6 +74,4 @@ kotlin {
   }
 }
 
-publishing {
-  publishOnSpace(project, "kotlin")
-}
+publishToSpace("kotlin")

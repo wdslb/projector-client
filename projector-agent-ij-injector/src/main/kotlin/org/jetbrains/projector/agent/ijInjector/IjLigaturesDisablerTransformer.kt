@@ -23,49 +23,22 @@
  */
 package org.jetbrains.projector.agent.ijInjector
 
-import javassist.ClassPool
-import javassist.LoaderClassPath
-import org.jetbrains.projector.agent.common.getClassFromClassfileBuffer
-import org.jetbrains.projector.util.logging.Logger
-import java.lang.instrument.ClassFileTransformer
-import java.security.ProtectionDomain
+import com.intellij.openapi.editor.colors.impl.FontPreferencesImpl
+import javassist.CtClass
+import org.jetbrains.projector.agent.common.transformation.TransformerSetupBase
 
-internal class IjLigaturesDisablerTransformer private constructor(
-  private val ideCp: ClassPool,
-) : ClassFileTransformer {
+internal object IjLigaturesDisablerTransformer : TransformerSetupBase<IjInjector.AgentParameters>() {
 
-  override fun transform(
-    loader: ClassLoader,
-    className: String,
-    classBeingRedefined: Class<*>?,
-    protectionDomain: ProtectionDomain?,
-    classfileBuffer: ByteArray,
-  ): ByteArray? {
-    return transformClass(className, classfileBuffer)
-  }
+  override val classTransformations: Map<Class<*>, (CtClass) -> ByteArray?> = mapOf(
+    FontPreferencesImpl::class.java to ::transformFontPrefs,
+  )
 
-  private fun transformClass(className: String, classfileBuffer: ByteArray): ByteArray? {
-    return try {
-      when (className) {
-        fontPrefsPath -> transformFontPrefs(className, classfileBuffer)
-
-        else -> classfileBuffer
-      }
-    }
-    catch (e: Exception) {
-      logger.error(e) { "Class transform error" }
-      null
-    }
-  }
-
-  private fun transformFontPrefs(className: String, classfileBuffer: ByteArray): ByteArray {
-    logger.debug { "Transforming fontprefs..." }
-    val clazz = getClassFromClassfileBuffer(ideCp, className, classfileBuffer)
-    clazz.defrost()
+  private fun transformFontPrefs(clazz: CtClass): ByteArray {
 
     clazz
       .getDeclaredMethod("useLigatures")
       .setBody(
+        // language=java prefix="class FontPreferencesImpl { public boolean useLigatures()" suffix="}"
         """
           {
             return false;
@@ -74,46 +47,5 @@ internal class IjLigaturesDisablerTransformer private constructor(
       )
 
     return clazz.toBytecode()
-  }
-
-  companion object {
-
-    private val logger = Logger<IjLigaturesDisablerTransformer>()
-
-    private const val SE_CONTRIBUTOR_EP = "com.intellij.searchEverywhereContributor"
-
-    private const val fontPrefsClass = "com.intellij.openapi.editor.colors.impl.FontPreferencesImpl"
-    private val fontPrefsPath = fontPrefsClass.replace('.', '/')
-
-    fun agentmain(
-      utils: IjInjector.Utils,
-    ) {
-      logger.debug { "agentmain start" }
-
-      val extensionPointName = utils.createExtensionPointName(SE_CONTRIBUTOR_EP)
-      val extensions = utils.extensionPointNameGetExtensions(extensionPointName)
-
-      val ideClassloader = extensions.filterNotNull().first()::class.java.classLoader
-
-      val ideCp = ClassPool().apply {
-        appendClassPath(LoaderClassPath(ideClassloader))
-      }
-      val transformer = IjLigaturesDisablerTransformer(ideCp)
-
-      utils.instrumentation.addTransformer(transformer, true)
-
-      listOf(
-        fontPrefsClass,
-      ).forEach { clazz ->
-        try {
-          utils.instrumentation.retransformClasses(Class.forName(clazz, false, ideClassloader))
-        }
-        catch (t: Throwable) {
-          logger.error(t) { "Class retransform error" }
-        }
-      }
-
-      logger.debug { "agentmain finish" }
-    }
   }
 }

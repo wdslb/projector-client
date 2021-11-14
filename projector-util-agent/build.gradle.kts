@@ -27,34 +27,16 @@ plugins {
   jacoco
 }
 
-jacoco {
-  toolVersion = "0.8.7"
-}
-
-tasks.withType<JacocoReport> {
-  reports {
-    xml.isEnabled = true
-    xml.destination = file(layout.buildDirectory.dir("../../JacocoReports/jacocoReportUtillAgent.xml"))
-    csv.required.set(false)
-    html.outputLocation.set(layout.buildDirectory.dir("jacocoHtmlProjectorUtillAgent"))
-  }
-}
+setupJacoco()
 
 kotlin {
   explicitApi()
 }
 
-publishing {
-  publishOnSpace(project, "java")
-}
+publishToSpace("java")
 
 dependencies {
   implementation(project(":projector-util-logging"))
 
   testImplementation(kotlin("test"))
-}
-
-tasks.test {
-  useJUnitPlatform()
-  finalizedBy(tasks.jacocoTestReport)
 }

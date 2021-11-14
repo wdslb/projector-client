@@ -23,83 +23,166 @@
  */
 package org.jetbrains.projector.agent.ijInjector
 
-import javassist.ClassPool
-import javassist.LoaderClassPath
-import org.jetbrains.projector.agent.common.getClassFromClassfileBuffer
-import org.jetbrains.projector.agent.init.IjArgs
-import org.jetbrains.projector.util.logging.Logger
-import java.lang.instrument.ClassFileTransformer
-import java.lang.reflect.InvocationTargetException
-import java.security.ProtectionDomain
+import com.intellij.ide.plugins.PluginManagerCore
+import com.intellij.openapi.extensions.PluginId
+import com.intellij.openapi.util.BuildNumber
+import com.intellij.ui.jcef.JBCefApp
+import javassist.CtClass
+import org.jetbrains.projector.agent.common.transformation.TransformationResult
+import org.jetbrains.projector.agent.common.transformation.TransformerSetupBase
+import org.jetbrains.projector.agent.common.transformation.classForNameOrNull
+import org.jetbrains.projector.ij.md.markdownPlugin
+import org.jetbrains.projector.util.loading.ProjectorClassLoader
 
-internal class IjMdTransformer private constructor(
-  private val mdCp: ClassPool,
-  private val mdPanelMakerClass: String,
-  private val mdPanelMakerMethod: String,
-) : ClassFileTransformer {
+internal object IjMdTransformer : TransformerSetupBase<IjInjector.AgentParameters>() {
 
-  override fun transform(
-    loader: ClassLoader,
-    className: String,
-    classBeingRedefined: Class<*>?,
-    protectionDomain: ProtectionDomain?,
-    classfileBuffer: ByteArray,
-  ): ByteArray? {
-    return transformClass(className, classfileBuffer)
-  }
+  // language=java prefix="import " suffix=";"
+  private const val javaFxClass = "org.intellij.plugins.markdown.ui.preview.javafx.JavaFxHtmlPanelProvider"
 
-  private fun transformClass(className: String, classfileBuffer: ByteArray): ByteArray? {
-    return try {
-      when (className) {
-        javaFxPath -> transformMdHtmlPanelProvider(MdPreviewType.JAVAFX, className, classfileBuffer)
-        jcefPath -> transformMdHtmlPanelProvider(MdPreviewType.JCEF, className, classfileBuffer)
+  // language=java prefix="import " suffix=";"
+  private const val jcefClass = "org.intellij.plugins.markdown.ui.preview.jcef.JCEFHtmlPanelProvider"
 
-        else -> classfileBuffer
+  // language=java prefix="import " suffix=";"
+  private const val previewFileEditorClass = "org.intellij.plugins.markdown.ui.preview.MarkdownPreviewFileEditor"
+
+  override fun getTransformations(
+    parameters: IjInjector.AgentParameters,
+    classLoader: ClassLoader,
+  ): Map<Class<*>, (CtClass) -> ByteArray?> {
+
+    val projectorClassLoader = ProjectorClassLoader.instance
+    projectorClassLoader.addPluginLoader("org.intellij.plugins.markdown", classLoader)
+
+    val transformations = mutableMapOf<Class<*>, (CtClass) -> ByteArray?>()
+
+    transformations += listOf(
+      javaFxClass to MdPreviewType.JAVAFX,
+      jcefClass to MdPreviewType.JCEF,
+    ).mapNotNull { (className, previewType) ->
+      val clazz = classForNameOrNull(className, classLoader) ?: run {
+        transformationResultConsumer(TransformationResult.Skip(this, className, "Class not found"))
+        return@mapNotNull null
       }
+      clazz to previewType
+    }.associate { (clazz, previewType) ->
+      clazz to { ctClass -> transformMdHtmlPanelProvider(previewType, ctClass, parameters.markdownPanelClassName, parameters.isAgent) }
     }
-    catch (e: Exception) {
-      logger.error(e) { "Class transform error" }
-      null
+
+    if (!parameters.isAgent && isPreviewCheckIsBrokenInHeadless()) {
+      val previewFileEditor = Class.forName(previewFileEditorClass, false, classLoader)
+      transformations[previewFileEditor] = ::fixMarkdownPreviewNPE
     }
+
+    return transformations
   }
 
-  private fun transformMdHtmlPanelProvider(previewType: MdPreviewType, className: String, classfileBuffer: ByteArray): ByteArray {
-    logger.debug { "Transforming MdHtmlPanelProvider (${previewType.displayName})..." }
-    val clazz = getClassFromClassfileBuffer(mdCp, className, classfileBuffer)
-    clazz.defrost()
+  override fun isTransformerAvailable(parameters: IjInjector.AgentParameters, unavailableReasonConsumer: (String) -> Unit): Boolean {
+    val reason = when {
+      markdownPlugin == null -> "Markdown plugin is not installed"
+      !markdownPlugin!!.isEnabled -> "Markdown plugin is disabled"
+      else -> return true
+    }
+
+    unavailableReasonConsumer(reason)
+    return false
+  }
+
+  override fun getClassLoader(parameters: IjInjector.AgentParameters): ClassLoader {
+    return markdownPlugin!!.pluginClassLoader
+  }
+
+  private fun isPreviewCheckIsBrokenInHeadless(): Boolean {
+    val buildNumberMin = BuildNumber.fromString("201.0")!!
+    val buildNumberFixed = BuildNumber.fromString("212.0")!!
+    val markdownVersionString = PluginManagerCore.getPlugin(PluginId.getId("org.intellij.plugins.markdown"))!!.version
+    val markdownBuildNumber = BuildNumber.fromString(markdownVersionString)!!
+    return markdownBuildNumber >= buildNumberMin && markdownBuildNumber < buildNumberFixed
+  }
+
+  private fun fixMarkdownPreviewNPE(previewFileEditorClazz: CtClass): ByteArray {
+
+    @Suppress("deprecation") // copied from Markdown plugin 212
+    previewFileEditorClazz
+      .getDeclaredMethod("isPreviewShown")
+      .setBody(
+        // language=java prefix="class MarkdownPreviewFileEditor { private static boolean isPreviewShown(@NotNull com.intellij.openapi.project.Project $1, @NotNull com.intellij.openapi.vfs.VirtualFile $2)" suffix="}"
+        """
+          {
+            org.intellij.plugins.markdown.ui.preview.MarkdownSplitEditorProvider provider = 
+              com.intellij.openapi.fileEditor.FileEditorProvider
+                .EP_FILE_EDITOR_PROVIDER
+                .findExtension(org.intellij.plugins.markdown.ui.preview.MarkdownSplitEditorProvider.class);
+            if (provider == null) {
+              return true;
+            }
+        
+            com.intellij.openapi.fileEditor.FileEditorState state = com.intellij.openapi.fileEditor.impl.EditorHistoryManager.getInstance($1).getState($2, provider);
+            if (!(state instanceof org.intellij.plugins.markdown.ui.split.SplitFileEditor.MyFileEditorState)) {
+              return true;
+            }
+        
+            String layout = ((org.intellij.plugins.markdown.ui.split.SplitFileEditor.MyFileEditorState)state).getSplitLayout();
+            return layout == null || !layout.equals("FIRST");
+          }
+        """.trimIndent()
+      )
+
+    return previewFileEditorClazz.toBytecode()
+  }
+
+  private fun transformMdHtmlPanelProvider(
+    previewType: MdPreviewType,
+    clazz: CtClass,
+    projectorMarkdownPanelClass: String,
+    isAgent: Boolean,
+  ): ByteArray {
+
+    val availabilityInfo = when (!isAgent || previewType.isAvailable()) {
+      // language=java prefix="class Dummy { var t = " suffix="; }"
+      true -> "org.intellij.plugins.markdown.ui.preview.MarkdownHtmlPanelProvider.AvailabilityInfo.AVAILABLE"
+      // language=java prefix="class Dummy { var t = " suffix="; }"
+      false -> "org.intellij.plugins.markdown.ui.preview.MarkdownHtmlPanelProvider.AvailabilityInfo.UNAVAILABLE"
+    }
 
     clazz
       .getDeclaredMethod("isAvailable")
       .setBody(
+        // language=java prefix="class MarkdownHtmlPanelProvider { @NotNull public abstract AvailabilityInfo isAvailable()" suffix="}"
         """
           {
-            return org.intellij.plugins.markdown.ui.preview.MarkdownHtmlPanelProvider.AvailabilityInfo.AVAILABLE;
+            return ${availabilityInfo};
           }
         """.trimIndent()
       )
 
-    // todo: use correct className, not hardcoded
     clazz
       .getDeclaredMethod("getProviderInfo")
       .setBody(
+        // language=java prefix="class MarkdownHtmlPanelProvider { @NotNull public abstract ProviderInfo getProviderInfo()" suffix="}"
         """
           {
-            final java.lang.String className = org.intellij.plugins.markdown.ui.preview.jcef.JCEFHtmlPanelProvider.class.getName();
-            return new org.intellij.plugins.markdown.ui.preview.MarkdownHtmlPanelProvider.ProviderInfo("Projector (${previewType.displayName})", className);
+            return new org.intellij.plugins.markdown.ui.preview.MarkdownHtmlPanelProvider.ProviderInfo("Projector (${previewType.displayName})", getClass().getName());
           }
         """.trimIndent()
       )
 
+    @Suppress("rawtypes", "unchecked", "RedundantArrayCreation") // for body injection
     clazz
       .getDeclaredMethod("createHtmlPanel")
       .setBody(
+        // language=java prefix="class MarkdownHtmlPanelProvider { @NotNull public abstract MarkdownHtmlPanel createHtmlPanel()" suffix="}"
         """
           {
-            final java.lang.ClassLoader mdClassLoader = org.intellij.plugins.markdown.ui.preview.MarkdownHtmlPanel.class.getClassLoader();
-            final Object panel = Class.forName("$mdPanelMakerClass")
-              .getDeclaredMethod("$mdPanelMakerMethod", new java.lang.Class[] { java.lang.ClassLoader.class })
-              .invoke(null, new java.lang.Object[] { mdClassLoader });
-            return (org.intellij.plugins.markdown.ui.preview.MarkdownHtmlPanel) panel;
+            // we need the version loaded via system lassLoader
+            Class actualPrjClassLoaderClazz = ClassLoader.getSystemClassLoader().loadClass("org.jetbrains.projector.util.loading.ProjectorClassLoader");   
+            ClassLoader actualPrjClassLoader = (ClassLoader) actualPrjClassLoaderClazz
+                .getDeclaredMethod("getInstance", new Class[0])
+                .invoke(null, new Object[0]);
+            
+            String className = "$projectorMarkdownPanelClass";
+            Class mdPanelClazz = actualPrjClassLoader.loadClass(className);
+            
+            return (org.intellij.plugins.markdown.ui.preview.MarkdownHtmlPanel) mdPanelClazz.getDeclaredConstructor(new Class[] { boolean.class, String.class }).newInstance(new Object[] { Boolean.valueOf($isAgent), "${previewType.panelClass}" });
           }
         """.trimIndent()
       )
@@ -107,60 +190,30 @@ internal class IjMdTransformer private constructor(
     return clazz.toBytecode()
   }
 
-  private enum class MdPreviewType(val displayName: String) {
+  private enum class MdPreviewType(val displayName: String, val panelClass: String) {
 
-    JAVAFX("JavaFX WebView"),
-    JCEF("JCEF Browser"),
-  }
-
-  companion object {
-
-    private val logger = Logger<IjMdTransformer>()
-
-    private const val MD_EXTENSION_ID = "org.intellij.markdown.html.panel.provider"
-
-    private const val javaFxClass = "org.intellij.plugins.markdown.ui.preview.javafx.JavaFxHtmlPanelProvider"
-    private val javaFxPath = javaFxClass.replace('.', '/')
-    private const val jcefClass = "org.intellij.plugins.markdown.ui.preview.jcef.JCEFHtmlPanelProvider"
-    private val jcefPath = jcefClass.replace('.', '/')
-
-    fun agentmain(utils: IjInjector.Utils) {
-      logger.debug { "IjMdTransformer agentmain start" }
-
-      val extensionPointName = utils.createExtensionPointName(MD_EXTENSION_ID)
-      val extensions = try {
-        utils.extensionPointNameGetExtensions(extensionPointName)
-      } catch (e: InvocationTargetException) {
-        logger.debug { "Markdown plugin is not installed. Skip the transform" }
-        return
-      }
-
-      val mdClassloader = extensions.filterNotNull().first()::class.java.classLoader
-
-      val mdCp = ClassPool().apply {
-        appendClassPath(LoaderClassPath(mdClassloader))
-      }
-
-      val mdPanelMakerClass = utils.args.getValue(IjArgs.MD_PANEL_MAKER_CLASS)
-      val mdPanelMakerMethod = utils.args.getValue(IjArgs.MD_PANEL_MAKER_METHOD)
-
-      val transformer = IjMdTransformer(mdCp, mdPanelMakerClass = mdPanelMakerClass, mdPanelMakerMethod = mdPanelMakerMethod)
-
-      utils.instrumentation.addTransformer(transformer, true)
-
-      listOf(
-        javaFxClass,
-        jcefClass,
-      ).forEach { clazz ->
+    JAVAFX("JavaFX WebView", "org.intellij.plugins.markdown.ui.preview.javafx.MarkdownJavaFxHtmlPanel") {
+      override fun isAvailable(): Boolean {
         try {
-          utils.instrumentation.retransformClasses(Class.forName(clazz, false, mdClassloader))
+          Class.forName("javafx.scene.web.WebView", false, javaClass.classLoader)
+          return true
+        } catch (ignored: ClassNotFoundException) {
         }
-        catch (t: Throwable) {
-          logger.info(t) { "Class retransform error" }
-        }
-      }
 
-      logger.debug { "IjMdTransformer agentmain finish" }
-    }
+        return false
+      }
+    },
+    JCEF("JCEF Browser", "org.intellij.plugins.markdown.ui.preview.jcef.MarkdownJCEFHtmlPanel") {
+      override fun isAvailable(): Boolean = if (JBCefApp.isSupported()) {
+        try {
+          JBCefApp.getInstance()
+          true
+        } catch (e: IllegalStateException) {
+          false
+        }
+      } else false
+    };
+
+    abstract fun isAvailable(): Boolean
   }
 }

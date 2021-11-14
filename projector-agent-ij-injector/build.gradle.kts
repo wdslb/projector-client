@@ -28,18 +28,7 @@ plugins {
   jacoco
 }
 
-jacoco {
-  toolVersion = "0.8.7"
-}
-
-tasks.withType<JacocoReport> {
-  reports {
-    xml.isEnabled = true
-    xml.destination = file(layout.buildDirectory.dir("../../JacocoReports/jacocoReportAgentIjInjector.xml"))
-    csv.required.set(false)
-    html.outputLocation.set(layout.buildDirectory.dir("jacocoHtmlProjectorClient"))
-  }
-}
+setupJacoco()
 
 kotlin {
   explicitApi()
@@ -47,14 +36,21 @@ kotlin {
 
 val javassistVersion: String by project
 val intellijPlatformVersion: String by project
+val intellijMarkdownPluginVersion: String by project
+val intellijJcefVersion: String by project
 
 dependencies {
   implementation(project(":projector-agent-common"))
-  implementation(project(":projector-agent-initialization"))
+  implementation(project(":projector-ij-common"))
+  implementation(project(":projector-util-loading"))
   implementation(project(":projector-util-logging"))
   implementation("org.javassist:javassist:$javassistVersion")
 
-  compileOnly("com.jetbrains.intellij.platform:extensions:$intellijPlatformVersion")
+  compileOnly("com.jetbrains.intellij.platform:ide-impl:$intellijPlatformVersion")
+  compileOnly("com.jetbrains.intellij.platform:util-ui:$intellijPlatformVersion")
+
+  compileOnly("com.jetbrains.intellij.markdown:markdown:$intellijMarkdownPluginVersion")
+  compileOnly("org.jetbrains.intellij.deps.jcef:jcef:$intellijJcefVersion")
 
   testImplementation(kotlin("test"))
 }
@@ -73,9 +69,4 @@ tasks.withType<Jar> {
   exclude("META-INF/versions/9/module-info.class")
 
   from(inline(configurations.runtimeClasspath))
-}
-
-tasks.test {
-  useJUnitPlatform()
-  finalizedBy(tasks.jacocoTestReport)
 }

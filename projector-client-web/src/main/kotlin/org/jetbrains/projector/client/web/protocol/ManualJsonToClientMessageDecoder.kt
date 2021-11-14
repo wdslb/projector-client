@@ -97,6 +97,8 @@ object ManualJsonToClientMessageDecoder : ToClientMessageDecoder {
         content["f"] as Int,
         content["g"] as Int,
         content["h"] as Int,
+        content["i"] as Int,
+        content["j"] as Int,
       )
       else -> throw IllegalArgumentException("Unsupported caret info type: ${JSON.stringify(this)}")
     }
@@ -162,7 +164,8 @@ object ManualJsonToClientMessageDecoder : ToClientMessageDecoder {
     "k" to CursorType.W_RESIZE,
     "l" to CursorType.E_RESIZE,
     "m" to CursorType.HAND,
-    "n" to CursorType.MOVE
+    "n" to CursorType.MOVE,
+    "o" to CursorType.CUSTOM,
   )
 
   private fun String.toCursorType(): CursorType {

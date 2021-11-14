@@ -25,32 +25,33 @@ package org.jetbrains.projector.server.core.ij
 
 import org.jetbrains.projector.agent.init.IjArgs
 import org.jetbrains.projector.agent.init.toIjArgs
-import org.jetbrains.projector.server.core.ij.md.MarkdownPanelMaker
 import org.jetbrains.projector.util.agent.copyAgentToTempJarAndAttach
+import org.jetbrains.projector.util.loading.ProjectorClassLoader
 import java.lang.ref.WeakReference
 
+@Suppress("unused") // Used in projector-server
 public object IjInjectorAgentInitializer {
+
+  // raw string because it must be loaded with Markdown PluginClassLoader
+  internal const val MD_PANEL_CLASS_NAME = "org.jetbrains.projector.server.core.ij.md.ProjectorMarkdownPanel"
 
   @Suppress("unused") // Called from projector-server, don't trigger linter that doesn't know it
   @OptIn(ExperimentalStdlibApi::class)
   public fun init(isAgent: Boolean) {
-    IjInjectorAgentClassLoaders.prjClassLoader = WeakReference(javaClass.classLoader)
+    IjInjectorAgentClassLoaders.prjClassLoader = WeakReference(ProjectorClassLoader.instance)
     invokeWhenIdeaIsInitialized("attach IJ injector agent") { ideClassLoader ->
       IjInjectorAgentClassLoaders.ijClassLoader = WeakReference(ideClassLoader)
 
       val ijClProviderClass = IjInjectorAgentClassLoaders::class.java.name
       val ijClProviderMethod = IjInjectorAgentClassLoaders::getIdeClassloader.name
       val prjClProviderMethod = IjInjectorAgentClassLoaders::getProjectorClassloader.name
-      val mdPanelMakerClass = MarkdownPanelMaker::class.java.name
-      val mdPanelMakerMethod = MarkdownPanelMaker::createMarkdownHtmlPanel.name
 
       val args = mapOf(
         IjArgs.IS_AGENT to isAgent,
         IjArgs.IJ_CL_PROVIDER_CLASS to ijClProviderClass,
         IjArgs.IJ_CL_PROVIDER_METHOD to ijClProviderMethod,
         IjArgs.PRJ_CL_PROVIDER_METHOD to prjClProviderMethod,
-        IjArgs.MD_PANEL_MAKER_CLASS to mdPanelMakerClass,
-        IjArgs.MD_PANEL_MAKER_METHOD to mdPanelMakerMethod,
+        IjArgs.MD_PANEL_CLASS to MD_PANEL_CLASS_NAME,
       ).toIjArgs()
 
       copyAgentToTempJarAndAttach(

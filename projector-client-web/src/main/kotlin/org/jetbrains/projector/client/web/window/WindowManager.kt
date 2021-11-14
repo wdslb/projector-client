@@ -23,16 +23,40 @@
  */
 package org.jetbrains.projector.client.web.window
 
+import kotlinx.browser.window
 import org.jetbrains.projector.client.common.misc.ImageCacher
+import org.jetbrains.projector.client.web.state.ClientAction
 import org.jetbrains.projector.client.web.state.ClientStateMachine
 import org.jetbrains.projector.client.web.state.LafListener
 import org.jetbrains.projector.common.protocol.toClient.WindowData
+import org.jetbrains.projector.common.protocol.toServer.ClientWindowsActivationEvent
+import org.jetbrains.projector.common.protocol.toServer.ClientWindowsDeactivationEvent
 import org.w3c.dom.HTMLCanvasElement
+import org.w3c.dom.events.FocusEvent
 
 class WindowManager(private val stateMachine: ClientStateMachine, val imageCacher: ImageCacher) : Iterable<Window>, LafListener {
 
   companion object {
     const val zIndexStride = 10
+  }
+
+  init {
+    window.onblur = ::onDeactivated
+    window.onfocus = ::onActivated
+  }
+
+  private val visibleWindows get() = windows.values.filter { it.isShowing }
+
+  // todo: remove SUPPRESS after KT-8112 is implemented or KTIJ-15401 is solved in some other way
+  private fun onActivated(@Suppress("UNUSED_PARAMETER") event: FocusEvent) {
+    val windowIds = visibleWindows.map { it.id }
+    stateMachine.fire(ClientAction.AddEvent(ClientWindowsActivationEvent(windowIds)))
+  }
+
+  // todo: remove SUPPRESS after KT-8112 is implemented or KTIJ-15401 is solved in some other way
+  private fun onDeactivated(@Suppress("UNUSED_PARAMETER") event: FocusEvent) {
+    val windowIds = visibleWindows.map { it.id }
+    stateMachine.fire(ClientAction.AddEvent(ClientWindowsDeactivationEvent(windowIds)))
   }
 
   private val windows = mutableMapOf<Int, Window>()

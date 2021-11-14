@@ -208,3 +208,21 @@ data class ClientDisplaySetChangeEvent(
 data class ClientWindowCloseEvent(
   val windowId: Int,
 ) : ClientEvent()
+
+@Serializable
+data class ClientWindowInterestEvent(
+  val windowId: Int,
+  val isInterested: Boolean
+): ClientEvent()
+
+@Suppress("unused") //used in client-web/org.jetbrains.projector.client.web.window.WindowManager and at server side
+@Serializable
+data class ClientWindowsActivationEvent(
+  val windowIds: List<Int>,
+) : ClientEvent()
+
+@Suppress("unused") //used in client-web/org.jetbrains.projector.client.web.window.WindowManager and at server side
+@Serializable
+data class ClientWindowsDeactivationEvent(
+  val windowIds: List<Int>,
+) : ClientEvent()

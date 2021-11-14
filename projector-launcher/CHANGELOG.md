@@ -2,7 +2,17 @@
 
 Notable changes to this project are documented in this file.
 
-## 1.0.1
+# 1.0.2
+
+## Added
+
+- PRJ-469 MacOS ARM build.
+
+## Fixed
+
+- PRJ-723 Crash on Linux with glibc 2.34.
+
+# 1.0.1
 
 ## Fixed
 
